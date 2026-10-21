@@ -1,0 +1,17 @@
+[package]
+name = "ironboot"
+version = "0.1.0"
+edition = "2021"
+description = "Power-cut-safe signed A/B firmware update logic with rollback protection, no_std, tested by injecting a power cut at every flash operation"
+license = "MIT"
+
+[dependencies]
+ed25519-dalek = { version = "2", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+ed25519-dalek = { version = "2", default-features = false }
+
+# signature checks are slow in a debug build and the cut sweeps run thousands of boots
+[profile.test]
+opt-level = 3
