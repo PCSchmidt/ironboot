@@ -40,7 +40,7 @@ Attackers considered: (a) someone who can send bytes over the update link; (b) s
 
 | | Threat | Control | Status |
 | --- | --- | --- | --- |
-| **S**poofing / **T**ampering | Replace the bootloader itself | Intended: the RP2350's boot ROM verifies a signed first-stage image against a key hash held in one-time-programmable (OTP) memory, which would make this logic the second link of a chain | **Designed, not built; unverified.** I have not read the RP2350's secure-boot documentation closely enough to state its exact scheme; it must be checked before any claim |
+| **S**poofing / **T**ampering | Replace the bootloader itself | The RP2350's boot ROM verifies a signed image: a SHA-256 hash of the image, signed with an ECDSA secp256k1 key, whose public key's SHA-256 hash (fingerprint) must match one of up to four fingerprints held in one-time-programmable (OTP) memory (RP2350 datasheet, section 5.1 on signature verification and section 5.9.2 for the block format; read 2026-10-23 from a copy of the datasheet). That would make this logic the second link of a chain | **Designed, not built, not run on a chip.** The scheme is now read from the datasheet; whether it behaves so on a real board is untested. **A limit the datasheet itself states:** the signature check happens only at boot, so for an image kept in external flash someone with physical access can replace its contents after the check; the datasheet recommends packaged SRAM binaries for secure boot. This matches the check-to-use gap noted below and is not closed by this logic |
 | **T**ampering | Attach a debugger and rewrite memory or registers | Intended: lock debug access via OTP | **Not built** |
 | **E**levation | Glitch the clock or voltage during the signature check to skip it | None | **Not addressed.** Software cannot fully defend this; it needs hardware glitch detection or redundant checks |
 
@@ -48,7 +48,7 @@ Attackers considered: (a) someone who can send bytes over the update link; (b) s
 
 | | Threat | Control | Status |
 | --- | --- | --- | --- |
-| **T**ampering | Lower the floor to allow an old image | The floor is a thermometer count in one-time-programmable storage, so it can only rise; a version below it never boots | **Logic implemented and tested** against a simulated OTP. Whether the chip's OTP behaves this way, and how many versions it allows, is **unverified** (the sim allows a rise to any value one unit at a time) |
+| **T**ampering | Lower the floor to allow an old image | The floor is a thermometer count in one-time-programmable storage, so it can only rise; a version below it never boots | **Logic implemented and tested** against a simulated OTP. **The chip's own mechanism matches in kind and differs in timing** (RP2350 datasheet, section 5.1.11): the boot ROM keeps a minimum rollback version as a unary thermometer code in OTP rows (so it can be incremented but not decremented), refuses to boot a signed image whose rollback version is lower, and the rollback version is covered by the image's signature. **But the boot ROM raises the thermometer when an image with a non-zero rollback version boots successfully, not when the application later confirms it.** An A/B trial scheme must therefore keep the new image's rollback version equal to the old one's until it has been confirmed, and bump it only in a release that is meant to be irreversible, or a bad new image could make rolling back impossible. IronBoot's own floor (raised only on confirm) is a separate, application-level floor; whether to rely on the chip's, this one, or both is a design decision not yet made. The datasheet also advises a minimum rollback version of 1, because version 0 does not set the ROLLBACK_REQUIRED flag |
 | **D**enial of service | A buggy signed image is confirmed, raising the floor, and cannot be replaced by a fixed older one | Release discipline: bump the version for every shipped image; never ship an image that can confirm itself and be broken | Residual risk; irreversible by design |
 
 ### 5. Power (loss during update)
@@ -74,7 +74,7 @@ Attackers considered: (a) someone who can send bytes over the update link; (b) s
 
 ## Next, in order of value
 
-1. Read the RP2350 secure-boot and OTP documentation and replace "intended" above with what the chip actually offers, then run this logic on a board.
+1. Decide how IronBoot's application-level floor and the boot ROM's rollback thermometer fit together (the timing difference above), then run this logic on a board.
 2. Close the check-to-use gap (verify the copy in RAM, or use hardware verification).
 3. Add a signed recovery image so destroying one slot is not a permanent denial of service.
 4. The on-MCU anomaly detector from the project outline, with its own threat entry (poisoned or spoofed bus traffic).
